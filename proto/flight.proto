@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package flight.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// UNAUTHENTICATED без x-api-key. Изменения отклоняются с UNAVAILABLE, пока redis недоступен
+service FlightService {
+  // INVALID_ARGUMENT нет origin или destination
+  rpc SearchFlights(SearchFlightsRequest) returns (SearchFlightsResponse);
+  // NOT_FOUND
+  rpc GetFlight(GetFlightRequest) returns (Flight);
+  // NOT_FOUND, INVALID_ARGUMENT кривая цена. Пустая цена и UNSPECIFIED статус не меняются
+  rpc UpdateFlight(UpdateFlightRequest) returns (Flight);
+  // NOT_FOUND, FAILED_PRECONDITION рейс не SCHEDULED, RESOURCE_EXHAUSTED мало мест
+  rpc ReserveSeats(ReserveSeatsRequest) returns (Reservation);
+  // NOT_FOUND
+  rpc ReleaseReservation(ReleaseReservationRequest) returns (Reservation);
+}
+
+enum FlightStatus {
+  FLIGHT_STATUS_UNSPECIFIED = 0;
+  SCHEDULED = 1;
+  DEPARTED = 2;
+  CANCELLED = 3;
+  COMPLETED = 4;
+}
+
+enum ReservationStatus {
+  RESERVATION_STATUS_UNSPECIFIED = 0;
+  ACTIVE = 1;
+  RELEASED = 2;
+  EXPIRED = 3;
+}
+
+message Flight {
+  int64 id = 1;
+  string flight_number = 2;
+  string airline = 3;
+  string origin = 4;
+  string destination = 5;
+  google.protobuf.Timestamp departure_time = 6;
+  google.protobuf.Timestamp arrival_time = 7;
+  int32 total_seats = 8;
+  int32 available_seats = 9;
+  string price = 10;
+  FlightStatus status = 11;
+}
+
+message SearchFlightsRequest {
+  string origin = 1;
+  string destination = 2;
+  google.protobuf.Timestamp date = 3;
+}
+
+message SearchFlightsResponse {
+  repeated Flight flights = 1;
+}
+
+message GetFlightRequest {
+  int64 id = 1;
+}
+
+message UpdateFlightRequest {
+  int64 id = 1;
+  string price = 2;
+  FlightStatus status = 3;
+}
+
+message ReserveSeatsRequest {
+  int64 flight_id = 1;
+  int32 seat_count = 2;
+  string booking_id = 3;
+}
+
+message ReleaseReservationRequest {
+  string booking_id = 1;
+}
+
+message Reservation {
+  int64 id = 1;
+  int64 flight_id = 2;
+  string booking_id = 3;
+  int32 seat_count = 4;
+  ReservationStatus status = 5;
+}

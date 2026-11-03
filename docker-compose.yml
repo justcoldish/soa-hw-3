@@ -1,0 +1,66 @@
+services:
+  flight-db:
+    image: postgres:18
+    environment: {POSTGRES_DB: flight, POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres}
+    healthcheck: {test: pg_isready -U postgres, interval: 2s, retries: 30}
+
+  flight-migrate:
+    image: flyway/flyway:13
+    command: -url=jdbc:postgresql://flight-db:5432/flight -user=postgres -password=postgres -locations=filesystem:/flyway/migrations migrate
+    volumes: [./flight/migrations:/flyway/migrations]
+    depends_on: {flight-db: {condition: service_healthy}}
+
+  booking-db:
+    image: postgres:18
+    environment: {POSTGRES_DB: booking, POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres}
+    healthcheck: {test: pg_isready -U postgres, interval: 2s, retries: 30}
+
+  booking-migrate:
+    image: flyway/flyway:13
+    command: -url=jdbc:postgresql://booking-db:5432/booking -user=postgres -password=postgres -locations=filesystem:/flyway/migrations migrate
+    volumes: [./booking/migrations:/flyway/migrations]
+    depends_on: {booking-db: {condition: service_healthy}}
+
+  redis:
+    image: redis:8
+
+  redis-replica:
+    image: redis:8
+    command: redis-server --replicaof redis 6379
+    depends_on: [redis]
+
+  redis-sentinel-1: &sentinel
+    image: redis:8
+    # sentinel переписывает свой конфиг, поэтому работает с копией
+    command: sh -c 'cp /etc/sentinel.conf /data/sentinel.conf && exec redis-sentinel /data/sentinel.conf'
+    volumes: [./redis/sentinel.conf:/etc/sentinel.conf:ro]
+    depends_on: [redis, redis-replica]
+
+  redis-sentinel-2: *sentinel
+
+  redis-sentinel-3: *sentinel
+
+  flight:
+    build: {context: ., args: {SERVICE: flight}}
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@flight-db:5432/flight
+      REDIS_MASTER: mymaster
+      REDIS_SENTINELS: redis-sentinel-1,redis-sentinel-2,redis-sentinel-3
+      API_KEY: ${FLIGHT_API_KEY:-flight-secret-key}
+    depends_on:
+      flight-migrate: {condition: service_completed_successfully}
+      redis-sentinel-1: {condition: service_started}
+
+  booking:
+    build: {context: ., args: {SERVICE: booking}}
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@booking-db:5432/booking
+      FLIGHT_ADDR: flight:50051
+      FLIGHT_API_KEY: ${FLIGHT_API_KEY:-flight-secret-key}
+      CB_FAILURE_THRESHOLD: 5
+      CB_WINDOW_SECONDS: 30
+      CB_OPEN_TIMEOUT_SECONDS: 15
+    ports: ["${APP_PORT:-8000}:8000"]
+    depends_on:
+      booking-migrate: {condition: service_completed_successfully}
+      flight: {condition: service_started}

@@ -1,0 +1,27 @@
+[project]
+name = "soa-hw-3"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi==0.162.0",
+    "uvicorn==0.54.0",
+    "grpcio==1.85.1",
+    "grpcio-tools==1.85.1",
+    "psycopg[binary]==3.3.8",
+    "psycopg-pool==3.3.3",
+    "redis==8.1.0",
+]
+
+[tool.pyrefly]
+search-path = ["gen", "booking", "flight"]
+errors = { bad-override = false }
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+extraPaths = ["gen", "booking", "flight"]
+typeCheckingMode = "standard"
+enableTypeIgnoreComments = true
+
+[tool.ruff]
+src = ["gen", "booking", "flight"]
